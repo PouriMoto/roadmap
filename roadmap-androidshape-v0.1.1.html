@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>نقشه راه تحلیلگر مالی</title>
+
+<link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/marked@12.0.0/marked.min.js"></script>
+
+<style>
+  :root {
+    --bg: #f1f5f9;
+    --surface: #ffffff;
+    --primary: #3b82f6;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; font-family: 'Vazirmatn', Tahoma, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); }
+  #app { height: 100vh; display: flex; flex-direction: column; position: relative; }
+
+  /* ===== Header ===== */
+  .top-bar {
+    background: var(--surface);
+    padding: 14px 16px 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    z-index: 10;
+  }
+  .top-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .top-title { font-size: 16px; font-weight: 700; }
+  .top-title .ti { font-size: 20px; vertical-align: -3px; margin-left: 6px; color: var(--primary); }
+  .pct-badge {
+    background: #dbeafe; color: var(--primary); font-size: 13px; font-weight: 700;
+    padding: 4px 10px; border-radius: 20px;
+  }
+  .progress-track { width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+  .progress-fill {
+    height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, #3b82f6, #10b981);
+    transition: width .4s ease;
+  }
+
+  /* ===== Canvas ===== */
+  .canvas-wrap { flex: 1; overflow: auto; padding: 20px 16px 100px; }
+  .flow { display: flex; flex-direction: column; gap: 8px; position: relative; }
+
+  /* branch label */
+  .branch-header {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 700; color: var(--text-muted);
+    margin: 18px 0 4px;
+  }
+  .branch-header .ti { font-size: 16px; }
+
+  /* node row */
+  .row { display: flex; align-items: center; gap: 10px; }
+  .row.indent-1 { padding-right: 24px; }
+  .row.indent-2 { padding-right: 48px; }
+  .row.indent-3 { padding-right: 72px; }
+
+  .node {
+    flex: 1;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    transition: transform .15s, box-shadow .15s;
+    cursor: pointer;
+  }
+  .node:active { transform: scale(.98); }
+  .node-icon {
+    width: 34px; height: 34px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .node-body { flex: 1; min-width: 0; }
+  .node-title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+  .node-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 3px; }
+
+  /* category colors */
+  .cat-hard .node-icon  { background: #dbeafe; color: #2563eb; }
+  .cat-soft .node-icon  { background: #d1fae5; color: #059669; }
+  .cat-tool .node-icon  { background: #ede9fe; color: #7c3aed; }
+  .cat-cert .node-icon  { background: #fef3c7; color: #d97706; }
+  .cat-biz .node-icon   { background: #fee2e2; color: #dc2626; }
+
+  /* status */
+  .node.status-done { border-color: #34d399; background: #f0fdf4; }
+  .node.status-done .node-title::after { content: " ✓"; color: #059669; font-weight: 700; }
+  .node.status-learning { border-color: #fbbf24; background: #fffbeb; }
+
+  /* + button */
+  .expand-btn {
+    width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
+    border: 1.5px solid var(--border); background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: var(--text-muted); cursor: pointer;
+    transition: transform .2s;
+  }
+  .expand-btn.open { transform: rotate(45deg); background: #eff6ff; border-color: #93c5fd; color: var(--primary); }
+
+  /* ===== Bottom Sheet ===== */
+  .sheet-backdrop {
+    position: fixed; inset: 0; background: rgba(15,23,42,.4);
+    opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 90;
+  }
+  .sheet-backdrop.show { opacity: 1; pointer-events: auto; }
+
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    height: 68vh; max-height: 68vh;
+    background: var(--surface);
+    border-radius: 24px 24px 0 0;
+    box-shadow: 0 -8px 30px rgba(0,0,0,.15);
+    transform: translateY(100%);
+    transition: transform .3s cubic-bezier(.4,0,.2,1);
+    z-index: 100; display: flex; flex-direction: column;
+  }
+  .sheet.show { transform: translateY(0); }
+  .sheet-handle {
+    width: 40px; height: 4px; background: #cbd5e1; border-radius: 2px;
+    margin: 10px auto 4px; flex-shrink: 0;
+  }
+  .sheet-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 20px 10px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .sheet-header .sheet-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+  }
+  .sheet-title { flex: 1; font-size: 16px; font-weight: 700; }
+  .sheet-close {
+    border: none; background: #f1f5f9; width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: var(--text-muted); cursor: pointer;
+  }
+  .sheet-body { flex: 1; overflow-y: auto; padding: 16px 20px 24px; }
+
+  /* status chips */
+  .chip-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .chip {
+    flex: 1; padding: 10px 6px; border-radius: 12px; border: 1.5px solid var(--border);
+    background: #f8fafc; cursor: pointer; font-size: 12px; font-weight: 600;
+    text-align: center; color: var(--text-muted);
+    transition: all .15s;
+  }
+  .chip .ti { display: block; font-size: 18px; margin-bottom: 2px; }
+  .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .chip.active-learning { background: var(--warning); color: #fff; border-color: var(--warning); }
+  .chip.active-done { background: var(--success); color: #fff; border-color: var(--success); }
+
+  /* markdown content */
+  .md-content { font-size: 14px; line-height: 1.85; color: #1e293b; }
+  .md-content h2 { font-size: 15px; margin: 18px 0 8px; color: var(--text); }
+  .md-content h3 { font-size: 14px; margin: 14px 0 6px; color: var(--text); }
+  .md-content ul { padding-right: 20px; margin: 6px 0; }
+  .md-content li { margin-bottom: 4px; }
+  .md-content a { color: var(--primary); text-decoration: none; }
+
+  /* action button inside sheet */
+  .action-btn {
+    width: 100%; padding: 14px; border-radius: 14px; border: none;
+    background: var(--primary); color: #fff; font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    cursor: pointer; margin-top: 16px;
+  }
+  .action-btn:active { background: #2563eb; }
+  .action-btn .ti { font-size: 18px; }
+
+  /* suggestion form */
+  .form-field { margin-bottom: 12px; }
+  .form-field label { font-size: 12.5px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 6px; }
+  .form-field input, .form-field textarea {
+    width: 100%; padding: 12px 14px; border-radius: 12px;
+    border: 1.5px solid var(--border); background: #f8fafc;
+    font-size: 14px; font-family: inherit; resize: none;
+  }
+  .form-field input:focus, .form-field textarea:focus {
+    outline: none; border-color: var(--primary); background: #fff;
+  }
+  .form-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .btn-secondary {
+    flex: 1; padding: 13px; border-radius: 14px; border: 1.5px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-primary {
+    flex: 1; padding: 13px; border-radius: 14px; border: none;
+    background: var(--primary); color: #fff; font-size: 14px; font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* suggestions list */
+  .sugg-item {
+    padding: 12px 14px; border-radius: 12px; background: #f8fafc;
+    border: 1px solid var(--border); margin-bottom: 8px; font-size: 13px;
+  }
+  .sugg-item-title { font-weight: 600; margin-bottom: 2px; }
+  .sugg-item-url { color: var(--primary); font-size: 12px; word-break: break-all; }
+  .sugg-badge {
+    display: inline-block; font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 8px; background: #fef3c7; color: #b45309;
+    margin-top: 6px;
+  }
+  .empty-state { text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px; }
+
+  /* toast */
+  .toast {
+    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #1e293b; color: #fff; padding: 12px 20px; border-radius: 12px;
+    font-size: 13px; opacity: 0; transition: all .3s; z-index: 200; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* desktop tweak */
+  @media (min-width: 640px) {
+    .sheet { max-width: 500px; margin: 0 auto; }
+    .canvas-wrap { max-width: 720px; margin: 0 auto; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+/* ============ DATA ============ */
+const ICONS = {
+  hard: "ti-code", soft: "ti-users", tool: "ti-tool", cert: "ti-certificate", biz: "ti-briefcase",
+};
+
+const ROADMAP = [
+  {
+    branch: "مبانی حسابداری و مالی",
+    icon: "ti-calculator",
+    nodes: [
+      { id: "acc1", title: "اصول حسابداری دوطرفه", level: "مبتدی", hours: 8, cat: "hard",
+        children: [
+          { id: "acc1a", title: "بدهکار و بستانکار", level: "مبتدی", hours: 3, cat: "hard" },
+          { id: "acc1b", title: "چرخه حسابداری", level: "مبتدی", hours: 5, cat: "hard" },
+        ]},
+      { id: "acc2", title: "صورت‌های مالی", level: "مبتدی", hours: 20, cat: "hard",
+        children: [
+          { id: "acc2a", title: "ترازنامه", level: "مبتدی", hours: 6, cat: "hard" },
+          { id: "acc2b", title: "صورت سود و زیان", level: "مبتدی", hours: 6, cat: "hard" },
+          { id: "acc2c", title: "صورت جریان نقدی", level: "متوسط", hours: 8, cat: "hard" },
+        ]},
+      { id: "acc3", title: "استانداردهای IFRS و GAAP", level: "متوسط", hours: 15, cat: "biz" },
+    ],
+  },
+  {
+    branch: "تحلیل و مدل‌سازی",
+    icon: "ti-chart-line",
+    nodes: [
+      { id: "an1", title: "تحلیل نسبت‌های مالی", level: "متوسط", hours: 12, cat: "hard",
+        children: [
+          { id: "an1a", title: "نسبت‌های نقدینگی", level: "متوسط", hours: 3, cat: "hard" },
+          { id: "an1b", title: "نسبت‌های سودآوری", level: "متوسط", hours: 3, cat: "hard" },
+          { id: "an1c", title: "نسبت‌های اهرمی", level: "متوسط", hours: 3, cat: "hard" },
+          { id: "an1d", title: "نسبت‌های فعالیت", level: "متوسط", hours: 3, cat: "hard" },
+        ]},
+      { id: "an2", title: "مدل‌سازی مالی در Excel", level: "متوسط", hours: 30, cat: "hard",
+        children: [
+          { id: "an2a", title: "مدل سه‌بیانی", level: "پیشرفته", hours: 12, cat: "hard" },
+          { id: "an2b", title: "تحلیل سناریو", level: "متوسط", hours: 8, cat: "hard" },
+          { id: "an2c", title: "تحلیل حساسیت", level: "پیشرفته", hours: 10, cat: "hard" },
+        ]},
+      { id: "an3", title: "ارزش‌گذاری شرکت", level: "پیشرفته", hours: 40, cat: "hard",
+        children: [
+          { id: "an3a", title: "DCF (جریان نقدی تنزیل‌شده)", level: "پیشرفته", hours: 15, cat: "hard" },
+          { id: "an3b", title: "ارزش‌گذاری نسبی (P/E, EV/EBITDA)", level: "متوسط", hours: 10, cat: "hard" },
+          { id: "an3c", title: "ارزش دفتری و تعدیل‌شده", level: "متوسط", hours: 8, cat: "hard" },
+        ]},
+    ],
+  },
+  {
+    branch: "ابزارها و فناوری",
+    icon: "ti-device-laptop",
+    nodes: [
+      { id: "tl1", title: "Power BI و داشبوردسازی", level: "متوسط", hours: 15, cat: "tool" },
+      { id: "tl2", title: "Python برای مالی", level: "پیشرفته", hours: 40, cat: "tool",
+        children: [
+          { id: "tl2a", title: "pandas و numpy", level: "متوسط", hours: 12, cat: "tool" },
+          { id: "tl2b", title: "خواندن داده‌های بازار", level: "پیشرفته", hours: 10, cat: "tool" },
+          { id: "tl2c", title: "بک‌تست استراتژی", level: "پیشرفته", hours: 18, cat: "tool" },
+        ]},
+      { id: "tl3", title: "SQL برای تحلیل داده", level: "متوسط", hours: 12, cat: "tool" },
+      { id: "tl4", title: "Bloomberg Terminal", level: "متوسط", hours: 10, cat: "tool" },
+    ],
+  },
+  {
+    branch: "مهارت‌های نرم و ارتباطی",
+    icon: "ti-message-circle",
+    nodes: [
+      { id: "sf1", title: "ارتباط با ذی‌نفعان", level: "متوسط", hours: 10, cat: "soft" },
+      { id: "sf2", title: "ارائه به هیئت‌مدیره", level: "پیشرفته", hours: 12, cat: "soft",
+        children: [
+          { id: "sf2a", title: "اسلاید اجرایی", level: "متوسط", hours: 5, cat: "soft" },
+          { id: "sf2b", title: "روایت داده‌محور", level: "پیشرفته", hours: 7, cat: "soft" },
+        ]},
+      { id: "sf3", title: "مذاکره و مدیریت انتظارات", level: "متوسط", hours: 8, cat: "soft" },
+      { id: "sf4", title: "تفکر انتقادی", level: "مبتدی", hours: 6, cat: "soft" },
+    ],
+  },
+  {
+    branch: "دانش کسب‌وکار و ریسک",
+    icon: "ti-building-bank",
+    nodes: [
+      { id: "bz1", title: "مدیریت ریسک مالی", level: "پیشرفته", hours: 20, cat: "biz" },
+      { id: "bz2", title: "تحلیل بازار و صنعت", level: "متوسط", hours: 15, cat: "biz" },
+      { id: "bz3", title: "مقررات بورس و بانک مرکزی", level: "متوسط", hours: 10, cat: "biz" },
+    ],
+  },
+  {
+    branch: "گواهینامه‌ها و مسیر پیشرفت",
+    icon: "ti-award",
+    nodes: [
+      { id: "ct1", title: "CFA Level 1", level: "پیشرفته", hours: 300, cat: "cert" },
+      { id: "ct2", title: "FRM (مدیریت ریسک)", level: "پیشرفته", hours: 250, cat: "cert" },
+      { id: "ct3", title: "ACCA", level: "پیشرفته", hours: 400, cat: "cert" },
+    ],
+  },
+];
+
+const CONTENT = {
+  acc1: "## اصول حسابداری دوطرفه\nیادگیری قاعده بدهکار/بستانکار، معادله حسابداری و ثبت رویدادها.\n\n### منابع\n- Accounting Made Simple\n- Khan Academy",
+  acc2: "## صورت‌های مالی\nساختار سه صورت اصلی و ارتباط بین آن‌ها.\n\n### منابع\n- Thomas Ittelson\n- CFA Institute",
+  acc3: "## استانداردهای IFRS و GAAP\nتفاوت‌های کلیدی دو استاندارد و تأثیر بر گزارشگری.",
+  an1: "## تحلیل نسبت‌ها\nارزیابی سلامت مالی شرکت از طریق نسبت‌های کلیدی.",
+  an2: "## مدل‌سازی در Excel\nساخت مدل سه‌بیانی، سناریوسازی و تحلیل حساسیت.\n\n### منابع\n- Wall Street Prep",
+  an3: "## ارزش‌گذاری\nDCF، ارزش‌گذاری نسبی و روش‌های ترکیبی.",
+  tl2: "## Python برای مالی\npandas، numpy و پیاده‌سازی استراتژی‌ها.",
+  sf2: "## ارائه به هیئت‌مدیره\nساخت روایت داده‌محور و اسلاید اجرایی.",
+};
+
+/* ============ STORAGE ============ */
+const KEY = "fin-roadmap-v2";
+const load = () => {
+  try { return JSON.parse(localStorage.getItem(KEY)) || { statuses: {}, suggestions: [] }; }
+  catch { return { statuses: {}, suggestions: [] }; }
+};
+const save = (s) => localStorage.setItem(KEY, JSON.stringify(s));
+
+/* ============ HELPERS ============ */
+const allNodesFlat = ROADMAP.flatMap(b => b.nodes.flatMap(n => [n, ...(n.children || [])]));
+
+/* ============ COMPONENTS ============ */
+function NodeRow({ node, depth, statuses, expanded, onToggle, onSelect }) {
+  const hasChildren = node.children && node.children.length > 0;
+  const isOpen = expanded[node.id];
+  const status = statuses[node.id];
+  const indentClass = depth === 0 ? "" : `indent-${Math.min(depth, 3)}`;
+
+  return (
+    <>
+      <div className={`row ${indentClass}`}>
+        <div
+          className={`node cat-${node.cat} ${status ? "status-" + status : ""}`}
+          onClick={() => onSelect(node)}
+        >
+          <div className="node-icon"><i className={"ti " + ICONS[node.cat]}></i></div>
+          <div className="node-body">
+            <div className="node-title">{node.title}</div>
+            <div className="node-meta">
+              {node.level} • {node.hours} ساعت
+            </div>
+          </div>
+        </div>
+        {hasChildren && (
+          <button
+            className={"expand-btn " + (isOpen ? "open" : "")}
+            onClick={(e) => { e.stopPropagation(); onToggle(node.id); }}
+          >
+            <i className="ti ti-plus"></i>
+          </button>
+        )}
+      </div>
+      {hasChildren && isOpen && node.children.map(c => (
+        <NodeRow key={c.id} node={c} depth={depth + 1} statuses={statuses}
+          expanded={expanded} onToggle={onToggle} onSelect={onSelect} />
+      ))}
+    </>
+  );
+}
+
+/* ============ DETAIL SHEET ============ */
+function DetailSheet({ node, statuses, onClose, onStatusChange, onSuggest }) {
+  const status = statuses[node.id] || "idle";
+  const html = marked.parse(CONTENT[node.id] || `## ${node.title}\nسطح: ${node.level} — مدت تخمینی: ${node.hours} ساعت\n\n### منابع\n- در حال تکمیل...`);
+
+  return (
+    <div className="sheet-body">
+      <div className="chip-row">
+        <div className={"chip " + (status === "idle" ? "active" : "")} onClick={() => onStatusChange(node.id, "idle")}>
+          <i className="ti ti-circle"></i>ندیده‌ام
+        </div>
+        <div className={"chip " + (status === "learning" ? "active-learning" : "")} onClick={() => onStatusChange(node.id, "learning")}>
+          <i className="ti ti-progress"></i>در حال یادگیری
+        </div>
+        <div className={"chip " + (status === "done" ? "active-done" : "")} onClick={() => onStatusChange(node.id, "done")}>
+          <i className="ti ti-check"></i>تکمیل‌شده
+        </div>
+      </div>
+
+      <div className="md-content" dangerouslySetInnerHTML={{ __html: html }} />
+
+      <button className="action-btn" onClick={onSuggest}>
+        <i className="ti ti-plus"></i>
+        پیشنهاد دوره یا منبع
+      </button>
+    </div>
+  );
+}
+
+/* ============ SUGGEST SHEET ============ */
+function SuggestSheet({ node, onBack, onSubmit }) {
+  const [form, setForm] = useState({ title: "", url: "", reason: "" });
+
+  const submit = () => {
+    if (!form.title || !form.url) return;
+    onSubmit({ nodeId: node.id, ...form, id: Date.now(), createdAt: new Date().toISOString() });
+    setForm({ title: "", url: "", reason: "" });
+  };
+
+  return (
+    <div className="sheet-body">
+      <div className="form-field">
+        <label>عنوان منبع / دوره</label>
+        <input placeholder="مثلاً دوره Wall Street Prep" value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })} />
+      </div>
+      <div className="form-field">
+        <label>لینک</label>
+        <input placeholder="https://..." value={form.url}
+          onChange={(e) => setForm({ ...form, url: e.target.value })} />
+      </div>
+      <div className="form-field">
+        <label>دلیل پیشنهاد</label>
+        <textarea rows={3} placeholder="چرا این منبع مفید است؟" value={form.reason}
+          onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+      </div>
+      <div className="form-actions">
+        <button className="btn-secondary" onClick={onBack}>بازگشت</button>
+        <button className="btn-primary" onClick={submit}>ثبت پیشنهاد</button>
+      </div>
+    </div>
+  );
+}
+
+/* ============ APP ============ */
+function App() {
+  const [state, setState] = useState(load);
+  const [expanded, setExpanded] = useState({});
+  const [selected, setSelected] = useState(null);
+  const [view, setView] = useState("detail"); // detail | suggest
+  const [toast, setToast] = useState("");
+
+  useEffect(() => save(state), [state]);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2000);
+  };
+
+  const toggle = (id) => setExpanded(s => ({ ...s, [id]: !s[id] }));
+  const openNode = (node) => { setSelected(node); setView("detail"); };
+  const closeSheet = () => { setSelected(null); setView("detail"); };
+
+  const setStatus = (id, status) =>
+    setState(s => ({ ...s, statuses: { ...s.statuses, [id]: status } }));
+
+  const addSuggestion = (sug) => {
+    setState(s => ({ ...s, suggestions: [...s.suggestions, sug] }));
+    showToast("پیشنهاد شما ثبت شد ✓");
+    setView("detail");
+  };
+
+  const progress = (() => {
+    const done = allNodesFlat.filter(n => state.statuses[n.id] === "done").length;
+    return Math.round((done / allNodesFlat.length) * 100);
+  })();
+
+  return (
+    <>
+      <div className="top-bar">
+        <div className="top-title-row">
+          <div className="top-title">
+            <i className="ti ti-route"></i>
+            نقشه راه تحلیلگر مالی
+          </div>
+          <div className="pct-badge">{progress}%</div>
+        </div>
+        <div className="progress-track">
+          <div className="progress-fill" style={{ width: progress + "%" }} />
+        </div>
+      </div>
+
+      <div className="canvas-wrap">
+        <div className="flow">
+          {ROADMAP.map((branch, i) => (
+            <div key={i}>
+              <div className="branch-header">
+                <i className={"ti " + branch.icon}></i>
+                {branch.branch}
+              </div>
+              {branch.nodes.map(node => (
+                <NodeRow key={node.id} node={node} depth={0}
+                  statuses={state.statuses} expanded={expanded}
+                  onToggle={toggle} onSelect={openNode} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className={"sheet-backdrop " + (selected ? "show" : "")} onClick={closeSheet}></div>
+
+      <div className={"sheet " + (selected ? "show" : "")}>
+        <div className="sheet-handle"></div>
+        {selected && (
+          <>
+            <div className="sheet-header">
+              <div className={"sheet-icon cat-" + selected.cat}
+                style={{ background: "var(--bg)" }}>
+                <i className={"ti " + ICONS[selected.cat]}></i>
+              </div>
+              <div className="sheet-title">{selected.title}</div>
+              <button className="sheet-close" onClick={closeSheet}>
+                <i className="ti ti-x"></i>
+              </button>
+            </div>
+            {view === "detail" ? (
+              <DetailSheet node={selected} statuses={state.statuses}
+                onClose={closeSheet} onStatusChange={setStatus}
+                onSuggest={() => setView("suggest")} />
+            ) : (
+              <SuggestSheet node={selected} onBack={() => setView("detail")}
+                onSubmit={addSuggestion} />
+            )}
+          </>
+        )}
+      </div>
+
+      <div className={"toast " + (toast ? "show" : "")}>{toast}</div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<title>POC نقشه راه تحلیلگر مالی</title>
+
+<!-- React Flow + React via CDN -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/reactflow@11.11.4/dist/umd/index.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/reactflow@11.11.4/dist/style.css" />
+
+<!-- Markdown renderer -->
+<script src="https://unpkg.com/marked@12.0.0/marked.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; font-family: Tahoma, sans-serif; }
+  body { margin: 0; background: #f8fafc; }
+  #app { height: 100vh; display: flex; flex-direction: column; }
+  .progress-bar {
+    padding: 12px 20px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.08); z-index: 10;
+  }
+  .progress-track { width: 100%; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #10b981; transition: width .3s; }
+  .canvas { flex: 1; position: relative; }
+  .panel {
+    position: fixed; top: 0; left: 0; width: 420px; max-width: 90vw; height: 100vh;
+    background: #fff; box-shadow: 2px 0 12px rgba(0,0,0,.15);
+    padding: 20px; overflow-y: auto; z-index: 100;
+  }
+  .panel h2 { margin-top: 0; }
+  .close-btn { float: left; border: none; background: none; font-size: 20px; cursor: pointer; color: #64748b; }
+  .status-btns { display: flex; gap: 8px; margin: 12px 0; }
+  .status-btns button {
+    flex: 1; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;
+    background: #f1f5f9; cursor: pointer; font-size: 13px;
+  }
+  .status-btns button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .node-box {
+    padding: 8px 14px; border-radius: 8px; border: 2px solid; font-size: 13px;
+    background: #fff; cursor: pointer; min-width: 120px; text-align: center;
+  }
+  .node-hard { border-color: #3b82f6; background: #eff6ff; }
+  .node-soft { border-color: #10b981; background: #ecfdf5; }
+  .node-tool { border-color: #a855f7; background: #faf5ff; }
+  .node-cert { border-color: #eab308; background: #fefce8; }
+  .node-done { box-shadow: 0 0 0 3px #34d399; }
+  .node-learning { box-shadow: 0 0 0 3px #fbbf24; }
+  .suggest-form { border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 16px; }
+  .suggest-form input, .suggest-form textarea {
+    width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #cbd5e1; border-radius: 6px;
+  }
+  .suggest-form button {
+    background: #059669; color: #fff; border: none; padding: 8px 16px;
+    border-radius: 6px; cursor: pointer;
+  }
+  .suggestions-list { margin-top: 10px; font-size: 13px; color: #475569; }
+  .md-content { font-size: 14px; line-height: 1.7; color: #1e293b; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+const { default: ReactFlow, Background, Controls } = window.ReactFlow;
+
+// ---- داده نمونه: نقشه راه تحلیلگر مالی ----
+const ROADMAP = {
+  nodes: [
+    { id: "acc",   label: "مبانی حسابداری",     type: "hard", pos: { x: 0,   y: 0 } },
+    { id: "fs",    label: "صورت‌های مالی",       type: "hard", pos: { x: 250, y: 0 } },
+    { id: "ratio", label: "تحلیل نسبت‌ها",       type: "hard", pos: { x: 500, y: 0 } },
+    { id: "excel", label: "مدل‌سازی در Excel",  type: "hard", pos: { x: 500, y: 150 } },
+    { id: "val",   label: "ارزش‌گذاری",         type: "hard", pos: { x: 750, y: 150 } },
+    { id: "py",    label: "Python برای مالی",   type: "tool", pos: { x: 500, y: 300 } },
+    { id: "bi",    label: "Power BI",           type: "tool", pos: { x: 250, y: 300 } },
+    { id: "comm",  label: "ارتباط با ذی‌نفعان",  type: "soft", pos: { x: 0,   y: 150 } },
+    { id: "board", label: "ارائه به هیئت‌مدیره", type: "soft", pos: { x: 0,   y: 300 } },
+    { id: "cfa",   label: "CFA Level 1",        type: "cert", pos: { x: 750, y: 0 } },
+  ],
+  edges: [
+    ["acc","fs"],["fs","ratio"],["fs","excel"],["excel","val"],["ratio","val"],
+    ["excel","py"],["bi","ratio"],["comm","board"],["ratio","cfa"],
+  ],
+};
+
+// ---- محتوای Markdown نمونه ----
+const CONTENT = {
+  acc: `## مبانی حسابداری\nیادگیری اصول دوطرفه، بدهکار/بستانکار، و چرخه حسابداری.\n\n### منابع\n- کتاب Accounting Made Simple\n- دوره رایگان Khan Academy`,
+  fs: `## صورت‌های مالی\nترازنامه، صورت سود و زیان، جریان نقدی.\n\n### منابع\n- Thomas Ittelson – Financial Statements\n- مستندات CFA Institute`,
+  ratio: `## تحلیل نسبت‌ها\nنسبت‌های نقدینگی، سودآوری، اهرمی و فعالیت.\n\n### منابع\n- کتاب Financial Ratio Analysis`,
+  excel: `## مدل‌سازی در Excel\nساخت مدل سه‌بیانی، سناریو، و تحلیل حساسیت.\n\n### منابع\n- دوره Wall Street Prep`,
+  val: `## ارزش‌گذاری\nDCF، ارزش‌گذاری نسبی (P/E، EV/EBITDA)، و ارزش دفتری.\n\n### منابع\n- کتاب Investment Valuation – Damodaran`,
+  py: `## Python برای مالی\npandas، numpy، خواندن داده‌های مالی.\n\n### منابع\n- Python for Finance – Yves Hilpisch`,
+  bi: `## Power BI\nداشبوردسازی و گزارش‌های مالی تعاملی.\n\n### منابع\n- دوره Microsoft Learn`,
+  comm: `## ارتباط با ذی‌نفعان\nنوشتن ایمیل مؤثر، جلسه‌سازی، و مدیریت انتظارات.\n\n### منابع\n- کتاب Crucial Conversations`,
+  board: `## ارائه به هیئت‌مدیره\nساخت اسلاید اجرایی و روایت داده‌محور.\n\n### منابع\n- کتاب HBR Guide to Persuasive Presentations`,
+  cfa: `## CFA Level 1\nمبانی اخلاق، اقتصاد، و گزارشگری مالی.\n\n### منابع\n- وب‌سایت رسمی CFA Institute`,
+};
+
+// ---- ذخیره‌سازی ساده ----
+const LS_KEY = "fin-roadmap-poc";
+const loadState = () => {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || { statuses: {}, suggestions: [] }; }
+  catch { return { statuses: {}, suggestions: [] }; }
+};
+const saveState = (s) => localStorage.setItem(LS_KEY, JSON.stringify(s));
+
+// ---- گره سفارشی ----
+function SkillNode({ id, data }) {
+  const cls = `node-box node-${data.nodeType} ${data.status === "done" ? "node-done" : data.status === "learning" ? "node-learning" : ""}`;
+  return (
+    <div className={cls}>
+      {data.label}
+      {data.status === "done" && " ✅"}
+      {data.status === "learning" && " ⏳"}
+    </div>
+  );
+}
+
+const nodeTypes = { skill: SkillNode };
+
+// ---- پنل جزئیات ----
+function DetailPanel({ node, statuses, onClose, onStatusChange, suggestions, onAddSuggestion }) {
+  const [form, setForm] = useState({ title: "", url: "", reason: "" });
+  const status = statuses[node.id] || "idle";
+  const html = marked.parse(CONTENT[node.id] || "محتوایی موجود نیست.");
+  const nodeSuggestions = suggestions.filter((s) => s.nodeId === node.id);
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!form.title || !form.url) return;
+    onAddSuggestion({ nodeId: node.id, ...form, id: Date.now() });
+    setForm({ title: "", url: "", reason: "" });
+  };
+
+  return (
+    <div className="panel">
+      <button className="close-btn" onClick={onClose}>✕</button>
+      <h2>{node.label}</h2>
+
+      <div className="status-btns">
+        {[
+          ["idle", "ندیده‌ام"],
+          ["learning", "در حال یادگیری"],
+          ["done", "تکمیل‌شده"],
+        ].map(([val, txt]) => (
+          <button key={val} className={status === val ? "active" : ""}
+            onClick={() => onStatusChange(node.id, val)}>
+            {txt}
+          </button>
+        ))}
+      </div>
+
+      <div className="md-content" dangerouslySetInnerHTML={{ __html: html }} />
+
+      <div className="suggest-form">
+        <h3 style={{ fontSize: 15 }}>پیشنهاد منبع جدید</h3>
+        <form onSubmit={submit}>
+          <input placeholder="عنوان منبع" value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          <input placeholder="لینک" value={form.url}
+            onChange={(e) => setForm({ ...form, url: e.target.value })} />
+          <textarea placeholder="دلیل پیشنهاد" rows={2} value={form.reason}
+            onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+          <button type="submit">ثبت پیشنهاد</button>
+        </form>
+
+        {nodeSuggestions.length > 0 && (
+          <div className="suggestions-list">
+            <strong>پیشنهادهای شما:</strong>
+            <ul>
+              {nodeSuggestions.map((s) => (
+                <li key={s.id}>{s.title} — {s.url}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---- اپ اصلی ----
+function App() {
+  const [state, setState] = useState(loadState);
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => saveState(state), [state]);
+
+  const rfNodes = useMemo(
+    () =>
+      ROADMAP.nodes.map((n) => ({
+        id: n.id,
+        type: "skill",
+        position: n.pos,
+        data: { label: n.label, nodeType: n.type, status: state.statuses[n.id] },
+      })),
+    [state.statuses]
+  );
+
+  const rfEdges = useMemo(
+    () => ROADMAP.edges.map(([s, t], i) => ({ id: "e" + i, source: s, target: t })),
+    []
+  );
+
+  const progress = useMemo(() => {
+    const done = ROADMAP.nodes.filter((n) => state.statuses[n.id] === "done").length;
+    return Math.round((done / ROADMAP.nodes.length) * 100);
+  }, [state.statuses]);
+
+  const setStatus = (nodeId, status) =>
+    setState((s) => ({ ...s, statuses: { ...s.statuses, [nodeId]: status } }));
+
+  const addSuggestion = (sug) =>
+    setState((s) => ({ ...s, suggestions: [...s.suggestions, sug] }));
+
+  const selectedNode = ROADMAP.nodes.find((n) => n.id === selected);
+
+  return (
+    <>
+      <div className="progress-bar">
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 14 }}>
+          <span>پیشرفت کلی نقشه</span>
+          <span>{progress}%</span>
+        </div>
+        <div className="progress-track">
+          <div className="progress-fill" style={{ width: progress + "%" }} />
+        </div>
+      </div>
+
+      <div className="canvas">
+        <ReactFlow
+          nodes={rfNodes}
+          edges={rfEdges}
+          nodeTypes={nodeTypes}
+          onNodeClick={(_, node) => setSelected(node.id)}
+          fitView
+        >
+          <Background />
+          <Controls />
+        </ReactFlow>
+      </div>
+
+      {selectedNode && (
+        <DetailPanel
+          node={selectedNode}
+          statuses={state.statuses}
+          suggestions={state.suggestions}
+          onClose={() => setSelected(null)}
+          onStatusChange={setStatus}
+          onAddSuggestion={addSuggestion}
+        />
+      )}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(<App />);
+</script>
+</body>
+</html>

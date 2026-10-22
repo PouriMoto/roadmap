@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>نقشه راه تحلیلگر مالی</title>
+
+<link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/marked@12.0.0/marked.min.js"></script>
+
+<style>
+  :root {
+    --bg: #f1f5f9;
+    --surface: #ffffff;
+    --primary: #3b82f6;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+  }
+  * { box-sizing: border-box; font-family: 'Vazirmatn', Tahoma, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); }
+  #app { height: 100vh; display: flex; flex-direction: column; position: relative; }
+
+  .top-bar { background: var(--surface); padding: 14px 16px 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); z-index: 10; }
+  .top-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
+  .top-title { font-size: 15px; font-weight: 700; flex: 1; }
+  .top-title .ti { font-size: 20px; vertical-align: -3px; margin-left: 6px; color: var(--primary); }
+  .role-toggle { display: flex; background: #f1f5f9; border-radius: 10px; padding: 3px; gap: 2px; }
+  .role-toggle button { border: none; background: none; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 4px; }
+  .role-toggle button .ti { font-size: 14px; }
+  .role-toggle button.active { background: var(--surface); color: var(--primary); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .pct-badge { background: #dbeafe; color: var(--primary); font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
+  .progress-track { width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #3b82f6, #10b981); transition: width .4s ease; }
+
+  .canvas-wrap { flex: 1; overflow: auto; padding: 20px 16px 100px; }
+  .branch-header { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 18px 0 4px; }
+  .branch-header .ti { font-size: 16px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .row.indent-1 { padding-right: 24px; }
+  .row.indent-2 { padding-right: 48px; }
+  .row.indent-3 { padding-right: 72px; }
+  .node { flex: 1; display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.04); cursor: pointer; transition: transform .15s; }
+  .node:active { transform: scale(.98); }
+  .node-icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .node-body { flex: 1; min-width: 0; }
+  .node-title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+  .node-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .resource-badge { background: #e0e7ff; color: #4338ca; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px; }
+  .cat-hard .node-icon { background: #dbeafe; color: #2563eb; }
+  .cat-soft .node-icon { background: #d1fae5; color: #059669; }
+  .cat-tool .node-icon { background: #ede9fe; color: #7c3aed; }
+  .cat-cert .node-icon { background: #fef3c7; color: #d97706; }
+  .cat-biz .node-icon { background: #fee2e2; color: #dc2626; }
+  .node.status-done { border-color: #34d399; background: #f0fdf4; }
+  .node.status-done .node-title::after { content: " ✓"; color: #059669; font-weight: 700; }
+  .node.status-learning { border-color: #fbbf24; background: #fffbeb; }
+  .expand-btn { width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0; border: 1.5px solid var(--border); background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--text-muted); cursor: pointer; transition: transform .2s; }
+  .expand-btn.open { transform: rotate(45deg); background: #eff6ff; border-color: #93c5fd; color: var(--primary); }
+
+  .sheet-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.4); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 90; }
+  .sheet-backdrop.show { opacity: 1; pointer-events: auto; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; height: 82vh; max-height: 82vh; background: var(--surface); border-radius: 24px 24px 0 0; box-shadow: 0 -8px 30px rgba(0,0,0,.15); transform: translateY(100%); transition: transform .3s cubic-bezier(.4,0,.2,1); z-index: 100; display: flex; flex-direction: column; }
+  .sheet.show { transform: translateY(0); }
+  .sheet-handle { width: 40px; height: 4px; background: #cbd5e1; border-radius: 2px; margin: 10px auto 4px; flex-shrink: 0; }
+  .sheet-header { display: flex; align-items: center; gap: 10px; padding: 4px 20px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .sheet-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; background: var(--bg); }
+  .sheet-title { flex: 1; font-size: 15px; font-weight: 700; min-width: 0; }
+  .sheet-subtitle { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+  .sheet-close { border: none; background: #f1f5f9; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--text-muted); cursor: pointer; flex-shrink: 0; }
+  .sheet-body { flex: 1; overflow-y: auto; padding: 16px 20px 24px; }
+
+  .chip-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .chip { flex: 1; padding: 10px 6px; border-radius: 12px; border: 1.5px solid var(--border); background: #f8fafc; cursor: pointer; font-size: 12px; font-weight: 600; text-align: center; color: var(--text-muted); transition: all .15s; }
+  .chip .ti { display: block; font-size: 18px; margin-bottom: 2px; }
+  .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .chip.active-learning { background: var(--warning); color: #fff; border-color: var(--warning); }
+  .chip.active-done { background: var(--success); color: #fff; border-color: var(--success); }
+
+  .md-content { font-size: 14px; line-height: 1.85; color: #1e293b; }
+  .md-content h2 { font-size: 15px; margin: 18px 0 8px; }
+  .md-content h3 { font-size: 14px; margin: 14px 0 6px; }
+  .md-content ul { padding-right: 20px; margin: 6px 0; }
+  .md-content a { color: var(--primary); text-decoration: none; }
+
+  .action-btn { width: 100%; padding: 14px; border-radius: 14px; border: none; background: var(--primary); color: #fff; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; margin-top: 16px; }
+  .action-btn:active { background: #2563eb; }
+  .action-btn .ti { font-size: 18px; }
+
+  /* ===== Resources grouped by LEVEL ===== */
+  .res-section { margin-top: 18px; }
+  .res-section-head { display: flex; align-items: center; justify-content: space-between; font-size: 13.5px; font-weight: 700; margin-bottom: 12px; }
+  .res-section-head .label { display: flex; align-items: center; gap: 6px; }
+  .res-section-head .label .ti { color: var(--primary); font-size: 16px; }
+  .res-total { background: var(--bg); color: var(--text-muted); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+
+  .level-group { margin-bottom: 12px; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); background: #fafbfc; }
+  .level-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; user-select: none; background: var(--surface); }
+  .level-header:active { background: #f8fafc; }
+  .level-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot-beginner { background: #10b981; }
+  .dot-intermediate { background: #f59e0b; }
+  .dot-advanced { background: #ef4444; }
+  .level-name { flex: 1; font-size: 13.5px; font-weight: 700; }
+  .level-count { font-size: 11px; font-weight: 700; color: var(--text-muted); background: var(--bg); padding: 2px 8px; border-radius: 10px; }
+  .level-chevron { font-size: 16px; color: var(--text-muted); transition: transform .2s; }
+  .level-chevron.open { transform: rotate(180deg); }
+  .level-body { padding: 0 12px 12px; }
+
+  .type-filter-row { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 6px; margin-bottom: 8px; }
+  .type-filter-row::-webkit-scrollbar { display: none; }
+  .type-filter { flex-shrink: 0; padding: 5px 10px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface); font-size: 11px; font-weight: 600; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; gap: 3px; }
+  .type-filter .ti { font-size: 12px; }
+  .type-filter.active { background: #eff6ff; color: var(--primary); border-color: #93c5fd; }
+
+  .res-card { padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); margin-bottom: 8px; }
+  .res-card:last-child { margin-bottom: 0; }
+  .res-card-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+  .res-type-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+  .res-card-body { flex: 1; min-width: 0; }
+  .res-title { font-weight: 700; font-size: 13px; margin-bottom: 2px; line-height: 1.3; }
+  .res-url { color: var(--primary); font-size: 11px; word-break: break-all; display: block; text-decoration: none; }
+
+  .res-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px; display: inline-flex; align-items: center; gap: 3px; }
+  .badge .ti { font-size: 11px; }
+  .badge-source-admin { background: #dbeafe; color: #1e40af; }
+  .badge-source-user { background: #d1fae5; color: #065f46; }
+  .badge-free { background: #d1fae5; color: #047857; }
+  .badge-paid { background: #fee2e2; color: #b91c1c; }
+  .badge-freemium { background: #fef3c7; color: #b45309; }
+  .badge-lang { background: #e0f2fe; color: #0369a1; }
+  .badge-new { background: #fce7f3; color: #be185d; }
+  .badge-pending { background: #fef3c7; color: #b45309; }
+
+  .type-course { background: #dbeafe; color: #1d4ed8; }
+  .type-bootcamp { background: #fce7f3; color: #be185d; }
+  .type-video { background: #fee2e2; color: #b91c1c; }
+  .type-article { background: #e0f2fe; color: #0369a1; }
+  .type-book { background: #fef3c7; color: #b45309; }
+  .type-docs { background: #ede9fe; color: #6d28d9; }
+  .type-file { background: #d1fae5; color: #047857; }
+  .type-podcast { background: #fae8ff; color: #a21caf; }
+  .type-newsletter { background: #ecfccb; color: #4d7c0f; }
+  .type-community { background: #cffafe; color: #0e7490; }
+  .type-tool { background: #ede9fe; color: #7c3aed; }
+  .type-certification { background: #fef9c3; color: #a16207; }
+  .type-other { background: #f1f5f9; color: #475569; }
+
+  .res-vote-row { display: flex; gap: 8px; margin-top: 8px; }
+  .vote-btn { flex: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; color: var(--text-muted); }
+  .vote-btn.voted-up { background: #d1fae5; color: #047857; border-color: #a7f3d0; }
+  .vote-btn.voted-down { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+
+  .res-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .res-actions button { flex: 1; padding: 7px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-size: 11.5px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; }
+  .res-actions button.approve { color: #047857; border-color: #a7f3d0; background: #ecfdf5; }
+  .res-actions button.reject, .res-actions button.delete { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+
+  .form-field { margin-bottom: 12px; }
+  .form-field label { font-size: 12.5px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 6px; }
+  .form-field input, .form-field textarea, .form-field select { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--border); background: #f8fafc; font-size: 14px; font-family: inherit; resize: none; }
+  .form-field input:focus, .form-field textarea:focus, .form-field select:focus { outline: none; border-color: var(--primary); background: #fff; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .btn-secondary { flex: 1; padding: 13px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-primary { flex: 1; padding: 13px; border-radius: 14px; border: none; background: var(--primary); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+
+  .empty-state { text-align: center; color: var(--text-muted); font-size: 13px; padding: 30px 20px; }
+  .empty-state .ti { font-size: 40px; display: block; margin-bottom: 8px; opacity: .4; }
+
+  .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1e293b; color: #fff; padding: 12px 20px; border-radius: 12px; font-size: 13px; opacity: 0; transition: all .3s; z-index: 200; pointer-events: none; max-width: 90%; text-align: center; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .admin-wrap { flex: 1; overflow-y: auto; padding: 16px 16px 100px; }
+  .admin-tabs { display: flex; gap: 6px; background: var(--surface); border-radius: 12px; padding: 4px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .admin-tabs button { flex: 1; border: none; background: none; padding: 10px 6px; border-radius: 9px; font-size: 12.5px; font-weight: 600; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; position: relative; }
+  .admin-tabs button .ti { font-size: 15px; }
+  .admin-tabs button.active { background: var(--primary); color: #fff; }
+  .admin-tabs .count-badge { background: var(--danger); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 8px; min-width: 16px; }
+  .admin-tabs button.active .count-badge { background: rgba(255,255,255,.3); }
+  .admin-section { background: var(--surface); border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+  .admin-section-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .admin-section-title .ti { color: var(--primary); }
+  .admin-section-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat-card { background: #f8fafc; border-radius: 12px; padding: 12px 10px; text-align: center; border: 1px solid var(--border); }
+  .stat-num { font-size: 22px; font-weight: 800; color: var(--primary); }
+  .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .node-picker { display: flex; flex-wrap: wrap; gap: 6px; max-height: 150px; overflow-y: auto; padding: 8px; background: #f8fafc; border-radius: 12px; border: 1px solid var(--border); }
+  .node-picker .pick-item { padding: 6px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: 11.5px; cursor: pointer; font-weight: 600; }
+  .node-picker .pick-item.selected { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  .type-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .type-picker .type-item { padding: 8px 4px; border-radius: 10px; border: 1.5px solid var(--border); background: #f8fafc; cursor: pointer; text-align: center; font-size: 10px; font-weight: 600; color: var(--text-muted); }
+  .type-picker .type-item .ti { display: block; font-size: 18px; margin-bottom: 2px; }
+  .type-picker .type-item.selected { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
+
+  .level-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .level-picker .lv-item { padding: 10px 6px; border-radius: 10px; border: 1.5px solid var(--border); background: #f8fafc; cursor: pointer; text-align: center; font-size: 12px; font-weight: 700; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .level-picker .lv-item .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .level-picker .lv-item.selected { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
+
+  @media (min-width: 640px) {
+    .sheet { max-width: 500px; margin: 0 auto; }
+    .canvas-wrap, .admin-wrap { max-width: 720px; margin: 0 auto; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+/* ============ RESOURCE TYPES ============ */
+const RESOURCE_TYPES = {
+  course:       { label: "دوره",       icon: "ti-school",          color: "type-course" },
+  bootcamp:     { label: "بوتکمپ",     icon: "ti-rocket",          color: "type-bootcamp" },
+  video:        { label: "ویدیو",      icon: "ti-player-play",     color: "type-video" },
+  article:      { label: "مقاله",      icon: "ti-file-text",       color: "type-article" },
+  book:         { label: "کتاب",       icon: "ti-book",            color: "type-book" },
+  docs:         { label: "مستندات",    icon: "ti-file-description",color: "type-docs" },
+  file:         { label: "فایل",       icon: "ti-paperclip",       color: "type-file" },
+  podcast:      { label: "پادکست",     icon: "ti-microphone",      color: "type-podcast" },
+  newsletter:   { label: "خبرنامه",    icon: "ti-mail",            color: "type-newsletter" },
+  community:    { label: "انجمن",      icon: "ti-users-group",     color: "type-community" },
+  tool:         { label: "ابزار",      icon: "ti-tool",            color: "type-tool" },
+  certification:{ label: "گواهینامه",  icon: "ti-certificate",     color: "type-certification" },
+  other:        { label: "سایر",       icon: "ti-link",            color: "type-other" },
+};
+
+const LEVELS = [
+  { key: "مبتدی",   dot: "dot-beginner",     label: "مبتدی" },
+  { key: "متوسط",   dot: "dot-intermediate", label: "متوسط" },
+  { key: "پیشرفته", dot: "dot-advanced",     label: "پیشرفته" },
+];
+
+const getFileExt = (url) => {
+  if (!url) return "";
+  const m = url.split("?")[0].match(/\.([a-z0-9]+)$/i);
+  return m ? m[1].toLowerCase() : "";
+};
+const FILE_EXT_ICON = { xlsx: "ti-file-spreadsheet", xls: "ti-file-spreadsheet", csv: "ti-file-spreadsheet", pdf: "ti-file-type-pdf", docx: "ti-file-type-doc", doc: "ti-file-type-doc", pptx: "ti-file-type-ppt", ppt: "ti-file-type-ppt", zip: "ti-file-zip" };
+
+const ICONS = { hard: "ti-code", soft: "ti-users", tool: "ti-tool", cert: "ti-certificate", biz: "ti-briefcase" };
+
+const ROADMAP = [
+  { branch: "مبانی حسابداری و مالی", icon: "ti-calculator", nodes: [
+    { id: "acc1", title: "اصول حسابداری دوطرفه", level: "مبتدی", hours: 8, cat: "hard", children: [
+      { id: "acc1a", title: "بدهکار و بستانکار", level: "مبتدی", hours: 3, cat: "hard" },
+      { id: "acc1b", title: "چرخه حسابداری", level: "مبتدی", hours: 5, cat: "hard" },
+    ]},
+    { id: "acc2", title: "صورت‌های مالی", level: "مبتدی", hours: 20, cat: "hard", children: [
+      { id: "acc2a", title: "ترازنامه", level: "مبتدی", hours: 6, cat: "hard" },
+      { id: "acc2b", title: "صورت سود و زیان", level: "مبتدی", hours: 6, cat: "hard" },
+      { id: "acc2c", title: "صورت جریان نقدی", level: "متوسط", hours: 8, cat: "hard" },
+    ]},
+    { id: "acc3", title: "استانداردهای IFRS و GAAP", level: "متوسط", hours: 15, cat: "biz" },
+  ]},
+  { branch: "تحلیل و مدل‌سازی", icon: "ti-chart-line", nodes: [
+    { id: "an1", title: "تحلیل نسبت‌های مالی", level: "متوسط", hours: 12, cat: "hard", children: [
+      { id: "an1a", title: "نسبت‌های نقدینگی", level: "متوسط", hours: 3, cat: "hard" },
+      { id: "an1b", title: "نسبت‌های سودآوری", level: "متوسط", hours: 3, cat: "hard" },
+      { id: "an1c", title: "نسبت‌های اهرمی", level: "متوسط", hours: 3, cat: "hard" },
+      { id: "an1d", title: "نسبت‌های فعالیت", level: "متوسط", hours: 3, cat: "hard" },
+    ]},
+    { id: "an2", title: "مدل‌سازی مالی در Excel", level: "متوسط", hours: 30, cat: "hard", children: [
+      { id: "an2a", title: "مدل سه‌بیانی", level: "پیشرفته", hours: 12, cat: "hard" },
+      { id: "an2b", title: "تحلیل سناریو", level: "متوسط", hours: 8, cat: "hard" },
+      { id: "an2c", title: "تحلیل حساسیت", level: "پیشرفته", hours: 10, cat: "hard" },
+    ]},
+    { id: "an3", title: "ارزش‌گذاری شرکت", level: "پیشرفته", hours: 40, cat: "hard", children: [
+      { id: "an3a", title: "DCF", level: "پیشرفته", hours: 15, cat: "hard" },
+      { id: "an3b", title: "ارزش‌گذاری نسبی", level: "متوسط", hours: 10, cat: "hard" },
+      { id: "an3c", title: "ارزش دفتری", level: "متوسط", hours: 8, cat: "hard" },
+    ]},
+  ]},
+  { branch: "ابزارها و فناوری", icon: "ti-device-laptop", nodes: [
+    { id: "tl1", title: "Power BI و داشبوردسازی", level: "متوسط", hours: 15, cat: "tool" },
+    { id: "tl2", title: "Python برای مالی", level: "پیشرفته", hours: 40, cat: "tool", children: [
+      { id: "tl2a", title: "pandas و numpy", level: "متوسط", hours: 12, cat: "tool" },
+      { id: "tl2b", title: "خواندن داده‌های بازار", level: "پیشرفته", hours: 10, cat: "tool" },
+      { id: "tl2c", title: "بک‌تست استراتژی", level: "پیشرفته", hours: 18, cat: "tool" },
+    ]},
+    { id: "tl3", title: "SQL برای تحلیل داده", level: "متوسط", hours: 12, cat: "tool" },
+    { id: "tl4", title: "Bloomberg Terminal", level: "متوسط", hours: 10, cat: "tool" },
+  ]},
+  { branch: "مهارت‌های نرم و ارتباطی", icon: "ti-message-circle", nodes: [
+    { id: "sf1", title: "ارتباط با ذی‌نفعان", level: "متوسط", hours: 10, cat: "soft" },
+    { id: "sf2", title: "ارائه به هیئت‌مدیره", level: "پیشرفته", hours: 12, cat: "soft", children: [
+      { id: "sf2a", title: "اسلاید اجرایی", level: "متوسط", hours: 5, cat: "soft" },
+      { id: "sf2b", title: "روایت داده‌محور", level: "پیشرفته", hours: 7, cat: "soft" },
+    ]},
+    { id: "sf3", title: "مذاکره و مدیریت انتظارات", level: "متوسط", hours: 8, cat: "soft" },
+    { id: "sf4", title: "تفکر انتقادی", level: "مبتدی", hours: 6, cat: "soft" },
+  ]},
+  { branch: "دانش کسب‌وکار و ریسک", icon: "ti-building-bank", nodes: [
+    { id: "bz1", title: "مدیریت ریسک مالی", level: "پیشرفته", hours: 20, cat: "biz" },
+    { id: "bz2", title: "تحلیل بازار و صنعت", level: "متوسط", hours: 15, cat: "biz" },
+    { id: "bz3", title: "مقررات بورس و بانک مرکزی", level: "متوسط", hours: 10, cat: "biz" },
+  ]},
+  { branch: "گواهینامه‌ها و مسیر پیشرفت", icon: "ti-award", nodes: [
+    { id: "ct1", title: "CFA Level 1", level: "پیشرفته", hours: 300, cat: "cert" },
+    { id: "ct2", title: "FRM (مدیریت ریسک)", level: "پیشرفته", hours: 250, cat: "cert" },
+    { id: "ct3", title: "ACCA", level: "پیشرفته", hours: 400, cat: "cert" },
+  ]},
+];
+
+const CONTENT = {
+  acc1: "## اصول حسابداری دوطرفه\nیادگیری قاعده بدهکار/بستانکار و معادله حسابداری.",
+  acc2: "## صورت‌های مالی\nساختار سه صورت اصلی و ارتباط بین آن‌ها.",
+  an2: "## مدل‌سازی در Excel\nساخت مدل سه‌بیانی و تحلیل حساسیت.",
+  an3: "## ارزش‌گذاری\nDCF، ارزش‌گذاری نسبی و روش‌های ترکیبی.",
+};
+
+const allNodesFlat = ROADMAP.flatMap(b => b.nodes.flatMap(n => [n, ...(n.children || [])]));
+const nodeMap = Object.fromEntries(allNodesFlat.map(n => [n.id, n]));
+
+const SEED_RESOURCES = [
+  { id: "r1", nodeId: "acc1", type: "book", title: "Accounting Made Simple", url: "https://example.com/acc-made-simple", reason: "منبع پایه و ساده برای شروع", source: "admin", status: "approved", pricing: "paid", level: "مبتدی", lang: "en", votes: { up: 5, down: 0 }, createdAt: new Date(Date.now() - 86400000).toISOString() },
+  { id: "r2", nodeId: "an2", type: "course", title: "Wall Street Prep – Excel Modeling", url: "https://example.com/wsp", reason: "استاندارد صنعت برای مدل‌سازی", source: "admin", status: "approved", pricing: "paid", level: "متوسط", lang: "en", votes: { up: 12, down: 1 }, createdAt: new Date(Date.now() - 86400000 * 3).toISOString() },
+  { id: "r3", nodeId: "an2", type: "file", title: "مدل سه‌بیانی نمونه", url: "https://example.com/template.xlsx", reason: "قالب آماده برای تمرین", source: "admin", status: "approved", pricing: "free", level: "متوسط", lang: "fa", votes: { up: 8, down: 0 }, createdAt: new Date(Date.now() - 86400000 * 1).toISOString() },
+  { id: "r4", nodeId: "an2", type: "video", title: "آموزش مقدماتی Excel مالی", url: "https://example.com/excel-intro", reason: "برای شروع عالی است", source: "admin", status: "approved", pricing: "free", level: "مبتدی", lang: "fa", votes: { up: 20, down: 0 }, createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
+  { id: "r5", nodeId: "an3", type: "video", title: "آموزش DCF در ۳۰ دقیقه", url: "https://example.com/dcf-video", reason: "توضیح تصویری عالی", source: "admin", status: "approved", pricing: "free", level: "پیشرفته", lang: "fa", votes: { up: 15, down: 2 }, createdAt: new Date(Date.now() - 86400000 * 10).toISOString() },
+  { id: "r6", nodeId: "tl2", type: "article", title: "Python for Finance – راهنمای جامع", url: "https://example.com/py-finance", reason: "پوشش کامل pandas در مالی", source: "admin", status: "approved", pricing: "free", level: "متوسط", lang: "en", votes: { up: 6, down: 0 }, createdAt: new Date(Date.now() - 86400000 * 5).toISOString() },
+];
+
+const KEY = "fin-roadmap-v5";
+const load = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY));
+    if (!raw) return { statuses: {}, suggestions: SEED_RESOURCES, votes: {}, collapsed: {} };
+    return {
+      statuses: raw.statuses || {},
+      suggestions: raw.suggestions || SEED_RESOURCES,
+      votes: raw.votes || {},
+      collapsed: raw.collapsed || {},
+    };
+  } catch { return { statuses: {}, suggestions: SEED_RESOURCES, votes: {}, collapsed: {} }; }
+};
+const save = (s) => localStorage.setItem(KEY, JSON.stringify(s));
+
+const isNew = (iso) => iso && (Date.now() - new Date(iso).getTime()) < 7 * 86400000;
+
+/* ============ SHARED: RESOURCE BADGES ============ */
+function ResourceBadges({ r }) {
+  const t = RESOURCE_TYPES[r.type] || RESOURCE_TYPES.other;
+  const ext = r.type === "file" ? getFileExt(r.url) : "";
+  return (
+    <div className="res-badges">
+      <span className={"badge type-" + r.type}>
+        <i className={"ti " + (ext && FILE_EXT_ICON[ext] ? FILE_EXT_ICON[ext] : t.icon)}></i>
+        {t.label}{ext ? ` • ${ext.toUpperCase()}` : ""}
+      </span>
+      {r.pricing && <span className={"badge badge-" + r.pricing}>
+        <i className={"ti " + (r.pricing === "free" ? "ti-gift" : r.pricing === "paid" ? "ti-coin" : "ti-star")}></i>
+        {r.pricing === "free" ? "رایگان" : r.pricing === "paid" ? "پولی" : "نیمه‌رایگان"}
+      </span>}
+      {r.lang && <span className="badge badge-lang"><i className="ti ti-language"></i>{r.lang === "fa" ? "فارسی" : "انگلیسی"}</span>}
+      <span className={"badge badge-source-" + r.source}>
+        <i className={"ti " + (r.source === "admin" ? "ti-shield-check" : "ti-user")}></i>
+        {r.source === "admin" ? "تیم محتوا" : "جامعه"}
+      </span>
+      {isNew(r.createdAt) && <span className="badge badge-new"><i className="ti ti-sparkles"></i>جدید</span>}
+    </div>
+  );
+}
+
+/* ============ RESOURCE CARD ============ */
+function ResourceCard({ r, userVote, onVote }) {
+  const t = RESOURCE_TYPES[r.type] || RESOURCE_TYPES.other;
+  const ext = r.type === "file" ? getFileExt(r.url) : "";
+  const icon = ext && FILE_EXT_ICON[ext] ? FILE_EXT_ICON[ext] : t.icon;
+  return (
+    <div className="res-card">
+      <div className="res-card-top">
+        <div className={"res-type-icon " + t.color}><i className={"ti " + icon}></i></div>
+        <div className="res-card-body">
+          <div className="res-title">{r.title}</div>
+          <a className="res-url" href={r.url} target="_blank" rel="noreferrer">{r.url}</a>
+          <ResourceBadges r={r} />
+        </div>
+      </div>
+      {r.reason && <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4 }}>💡 {r.reason}</div>}
+      <div className="res-vote-row">
+        <button className={"vote-btn " + (userVote === "up" ? "voted-up" : "")} onClick={() => onVote(r.id, "up")}>
+          <i className="ti ti-thumb-up"></i> {r.votes?.up || 0}
+        </button>
+        <button className={"vote-btn " + (userVote === "down" ? "voted-down" : "")} onClick={() => onVote(r.id, "down")}>
+          <i className="ti ti-thumb-down"></i> {r.votes?.down || 0}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ============ LEVEL GROUP ============ */
+function LevelGroup({ level, resources, userVotes, collapsed, onToggle, onVote }) {
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [typeFilterOpen, setTypeFilterOpen] = useState(false);
+
+  if (resources.length === 0) return null;
+
+  const typeCounts = resources.reduce((acc, r) => { acc[r.type] = (acc[r.type] || 0) + 1; return acc; }, {});
+  const filtered = typeFilter === "all" ? resources : resources.filter(r => r.type === typeFilter);
+
+  return (
+    <div className="level-group">
+      <div className="level-header" onClick={() => onToggle(level.key)}>
+        <span className={"level-dot " + level.dot}></span>
+        <span className="level-name">{level.label}</span>
+        <span className="level-count">{resources.length} منبع</span>
+        <i className={"ti ti-chevron-down level-chevron " + (!collapsed ? "open" : "")}></i>
+      </div>
+      {!collapsed && (
+        <div className="level-body">
+          {Object.keys(typeCounts).length > 1 && (
+            <>
+              <div className="type-filter-row">
+                <div className={"type-filter " + (typeFilter === "all" ? "active" : "")} onClick={() => setTypeFilter("all")}>
+                  <i className="ti ti-list"></i> همه
+                </div>
+                {Object.keys(typeCounts).map(t => (
+                  <div key={t} className={"type-filter " + (typeFilter === t ? "active" : "")} onClick={() => setTypeFilter(t)}>
+                    <i className={"ti " + RESOURCE_TYPES[t].icon}></i> {RESOURCE_TYPES[t].label} ({typeCounts[t]})
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {filtered.map(r => (
+            <ResourceCard key={r.id} r={r} userVote={userVotes[r.id]} onVote={onVote} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+/* ============ NODE ROW ============ */
+function NodeRow({ node, depth, statuses, expanded, onToggle, onSelect, resourceCount }) {
+  const hasChildren = node.children && node.children.length > 0;
+  const isOpen = expanded[node.id];
+  const status = statuses[node.id];
+  const indentClass = depth === 0 ? "" : `indent-${Math.min(depth, 3)}`;
+  const count = resourceCount(node.id);
+
+  return (
+    <>
+      <div className={`row ${indentClass}`}>
+        <div className={`node cat-${node.cat} ${status ? "status-" + status : ""}`} onClick={() => onSelect(node)}>
+          <div className="node-icon"><i className={"ti " + ICONS[node.cat]}></i></div>
+          <div className="node-body">
+            <div className="node-title">{node.title}</div>
+            <div className="node-meta">
+              {node.level} • {node.hours} ساعت
+              {count > 0 && <span className="resource-badge">{count} منبع</span>}
+            </div>
+          </div>
+        </div>
+        {hasChildren && (
+          <button className={"expand-btn " + (isOpen ? "open" : "")}
+            onClick={(e) => { e.stopPropagation(); onToggle(node.id); }}>
+            <i className="ti ti-plus"></i>
+          </button>
+        )}
+      </div>
+      {hasChildren && isOpen && node.children.map(c => (
+        <NodeRow key={c.id} node={c} depth={depth + 1} statuses={statuses}
+          expanded={expanded} onToggle={onToggle} onSelect={onSelect} resourceCount={resourceCount} />
+      ))}
+    </>
+  );
+}
+
+/* ============ DETAIL SHEET ============ */
+function DetailSheet({ node, statuses, resources, userVotes, collapsed, onStatusChange, onSuggest, onVote, onToggleLevel }) {
+  const status = statuses[node.id] || "idle";
+  const html = marked.parse(CONTENT[node.id] || `## ${node.title}\nسطح: ${node.level} — مدت: ${node.hours} ساعت`);
+  const nodeRes = resources.filter(r => r.nodeId === node.id && r.status === "approved");
+
+  return (
+    <div className="sheet-body">
+      <div className="chip-row">
+        <div className={"chip " + (status === "idle" ? "active" : "")} onClick={() => onStatusChange(node.id, "idle")}>
+          <i className="ti ti-circle"></i>ندیده‌ام
+        </div>
+        <div className={"chip " + (status === "learning" ? "active-learning" : "")} onClick={() => onStatusChange(node.id, "learning")}>
+          <i className="ti ti-progress"></i>در حال یادگیری
+        </div>
+        <div className={"chip " + (status === "done" ? "active-done" : "")} onClick={() => onStatusChange(node.id, "done")}>
+          <i className="ti ti-check"></i>تکمیل‌شده
+        </div>
+      </div>
+
+      <div className="md-content" dangerouslySetInnerHTML={{ __html: html }} />
+
+      {nodeRes.length > 0 && (
+        <div className="res-section">
+          <div className="res-section-head">
+            <div className="label"><i className="ti ti-books"></i>منابع تأیید‌شده</div>
+            <span className="res-total">{nodeRes.length} منبع</span>
+          </div>
+
+          {LEVELS.map(level => {
+            const lvlRes = nodeRes.filter(r => (r.level || "مبتدی") === level.key);
+            const collapseKey = node.id + "::" + level.key;
+            return (
+              <LevelGroup key={level.key} level={level} resources={lvlRes}
+                userVotes={userVotes}
+                collapsed={!!collapsed[collapseKey]}
+                onToggle={() => onToggleLevel(collapseKey)}
+                onVote={onVote} />
+            );
+          })}
+        </div>
+      )}
+
+      {nodeRes.length === 0 && (
+        <div className="empty-state" style={{ marginTop: 20 }}>
+          <i className="ti ti-books"></i>
+          هنوز منبعی برای این گره تأیید نشده است. اولین نفر باش!
+        </div>
+      )}
+
+      <button className="action-btn" onClick={onSuggest}>
+        <i className="ti ti-plus"></i> پیشنهاد دوره یا منبع
+      </button>
+    </div>
+  );
+}
+
+/* ============ SUGGEST SHEET ============ */
+function SuggestSheet({ node, onBack, onSubmit }) {
+  const [form, setForm] = useState({ title: "", url: "", reason: "", type: "course", pricing: "free", level: node.level || "مبتدی", lang: "fa" });
+  const submit = () => {
+    if (!form.title || !form.url || form.reason.trim().length < 20) return;
+    onSubmit({ nodeId: node.id, ...form, id: Date.now(), source: "user", status: "pending", votes: { up: 0, down: 0 }, createdAt: new Date().toISOString() });
+    setForm({ title: "", url: "", reason: "", type: "course", pricing: "free", level: node.level || "مبتدی", lang: "fa" });
+  };
+  return (
+    <div className="sheet-body">
+      <div className="form-field"><label>نوع منبع</label>
+        <div className="type-picker">
+          {Object.entries(RESOURCE_TYPES).map(([k, v]) => (
+            <div key={k} className={"type-item " + (form.type === k ? "selected" : "")} onClick={() => setForm({ ...form, type: k })}>
+              <i className={"ti " + v.icon}></i>{v.label}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="form-field"><label>سطح</label>
+        <div className="level-picker">
+          {LEVELS.map(lv => (
+            <div key={lv.key} className={"lv-item " + (form.level === lv.key ? "selected" : "")} onClick={() => setForm({ ...form, level: lv.key })}>
+              <span className={"dot " + lv.dot} style={{ background: lv.dot === "dot-beginner" ? "#10b981" : lv.dot === "dot-intermediate" ? "#f59e0b" : "#ef4444" }}></span>
+              {lv.label}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="form-field"><label>عنوان</label>
+        <input placeholder="مثلاً دوره Wall Street Prep" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
+      <div className="form-field"><label>لینک</label>
+        <input placeholder="https://..." value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} /></div>
+      <div className="form-row">
+        <div className="form-field"><label>قیمت</label>
+          <select value={form.pricing} onChange={e => setForm({ ...form, pricing: e.target.value })}>
+            <option value="free">رایگان</option><option value="freemium">نیمه‌رایگان</option><option value="paid">پولی</option>
+          </select>
+        </div>
+        <div className="form-field"><label>زبان</label>
+          <select value={form.lang} onChange={e => setForm({ ...form, lang: e.target.value })}>
+            <option value="fa">فارسی</option><option value="en">انگلیسی</option>
+          </select>
+        </div>
+      </div>
+      <div className="form-field"><label>چرا این منبع خوب است؟ (حداقل ۲۰ کاراکتر)</label>
+        <textarea rows={3} value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} /></div>
+      <div className="form-actions">
+        <button className="btn-secondary" onClick={onBack}>بازگشت</button>
+        <button className="btn-primary" onClick={submit}>ثبت پیشنهاد</button>
+      </div>
+    </div>
+  );
+}
+
+/* ============ ADMIN ============ */
+function AdminView({ state, onApprove, onReject, onDeleteResource, onAddResource, showToast }) {
+  const [tab, setTab] = useState("pending");
+  const [filterType, setFilterType] = useState("all");
+  const [addForm, setAddForm] = useState({ nodeId: "", title: "", url: "", reason: "", type: "course", pricing: "free", level: "مبتدی", lang: "fa" });
+
+  const pending = state.suggestions.filter(s => s.status === "pending");
+  const approved = state.suggestions.filter(s => s.status === "approved");
+  const filteredPending = filterType === "all" ? pending : pending.filter(s => s.type === filterType);
+
+  const submitAdd = () => {
+    if (!addForm.nodeId || !addForm.title || !addForm.url) { showToast("فیلدهای ضروری خالی است"); return; }
+    onAddResource({ ...addForm, id: Date.now(), source: "admin", status: "approved", votes: { up: 0, down: 0 }, createdAt: new Date().toISOString() });
+    setAddForm({ nodeId: "", title: "", url: "", reason: "", type: "course", pricing: "free", level: "مبتدی", lang: "fa" });
+    showToast("منبع اضافه شد ✓");
+  };
+
+  return (
+    <div className="admin-wrap">
+      <div className="admin-tabs">
+        <button className={tab === "pending" ? "active" : ""} onClick={() => setTab("pending")}>
+          <i className="ti ti-clock"></i> در انتظار
+          {pending.length > 0 && <span className="count-badge">{pending.length}</span>}
+        </button>
+        <button className={tab === "resources" ? "active" : ""} onClick={() => setTab("resources")}>
+          <i className="ti ti-books"></i> منابع
+        </button>
+        <button className={tab === "add" ? "active" : ""} onClick={() => setTab("add")}>
+          <i className="ti ti-plus"></i> افزودن
+        </button>
+      </div>
+
+      {tab === "pending" && (
+        <>
+          <div className="admin-section">
+            <div className="admin-section-title"><i className="ti ti-stats"></i> خلاصه</div>
+            <div className="stats-grid">
+              <div className="stat-card"><div className="stat-num">{pending.length}</div><div className="stat-label">در انتظار</div></div>
+              <div className="stat-card"><div className="stat-num">{approved.length}</div><div className="stat-label">تأیید‌شده</div></div>
+              <div className="stat-card"><div className="stat-num">{state.suggestions.length}</div><div className="stat-label">کل</div></div>
+            </div>
+          </div>
+          {pending.length > 0 && (
+            <div className="type-filter-row">
+              <div className={"type-filter " + (filterType === "all" ? "active" : "")} onClick={() => setFilterType("all")}>
+                <i className="ti ti-list"></i> همه
+              </div>
+              {[...new Set(pending.map(s => s.type))].map(t => (
+                <div key={t} className={"type-filter " + (filterType === t ? "active" : "")} onClick={() => setFilterType(t)}>
+                  <i className={"ti " + RESOURCE_TYPES[t].icon}></i> {RESOURCE_TYPES[t].label}
+                </div>
+              ))}
+            </div>
+          )}
+          {filteredPending.length === 0 ? (
+            <div className="empty-state"><i className="ti ti-inbox"></i>پیشنهاد جدیدی در انتظار نیست</div>
+          ) : filteredPending.map(s => {
+            const node = nodeMap[s.nodeId];
+            return (
+              <div key={s.id} className="admin-section">
+                <div className="admin-section-title"><i className="ti ti-file-plus"></i>{s.title}</div>
+                <div className="admin-section-sub">برای گره: <strong>{node.title}</strong></div>
+                <a className="res-url" href={s.url} target="_blank" rel="noreferrer">{s.url}</a>
+                <ResourceBadges r={{ ...s, status: "pending" }} />
+                <div style={{ marginTop: 6 }}>
+                  <span className="badge" style={{ background: s.level === "مبتدی" ? "#d1fae5" : s.level === "متوسط" ? "#fef3c7" : "#fee2e2", color: s.level === "مبتدی" ? "#047857" : s.level === "متوسط" ? "#b45309" : "#b91c1c" }}>
+                    <i className="ti ti-chart-arrows"></i>{s.level}
+                  </span>
+                </div>
+                {s.reason && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>{s.reason}</div>}
+                <div className="res-actions">
+                  <button className="reject" onClick={() => onReject(s.id)}><i className="ti ti-x"></i> رد</button>
+                  <button className="approve" onClick={() => onApprove(s.id)}><i className="ti ti-check"></i> تأیید</button>
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {tab === "resources" && (
+        <>
+          {approved.length === 0 ? (
+            <div className="empty-state"><i className="ti ti-books"></i>هنوز منبعی تأیید نشده است</div>
+          ) : LEVELS.map(level => {
+            const lvlRes = approved.filter(r => (r.level || "مبتدی") === level.key);
+            if (lvlRes.length === 0) return null;
+            return (
+              <div key={level.key} style={{ marginBottom: 18 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span className={"level-dot " + level.dot}></span>
+                  <span style={{ fontSize: 13.5, fontWeight: 700 }}>{level.label}</span>
+                  <span className="level-count">{lvlRes.length}</span>
+                </div>
+                {lvlRes.map(s => {
+                  const node = nodeMap[s.nodeId];
+                  return (
+                    <div key={s.id} className="admin-section">
+                      <div className="admin-section-title"><i className="ti ti-bookmark"></i>{s.title}</div>
+                      <div className="admin-section-sub">گره: {node.title}</div>
+                      <a className="res-url" href={s.url} target="_blank" rel="noreferrer">{s.url}</a>
+                      <ResourceBadges r={s} />
+                      <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 8 }}>
+                        👍 {s.votes?.up || 0} / 👎 {s.votes?.down || 0}
+                      </div>
+                      <div className="res-actions">
+                        <button className="delete" onClick={() => onDeleteResource(s.id)}><i className="ti ti-trash"></i> حذف</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {tab === "add" && (
+        <div className="admin-section">
+          <div className="admin-section-title"><i className="ti ti-plus"></i> افزودن منبع جدید</div>
+          <div className="admin-section-sub">به‌عنوان تیم محتوا مستقیماً به یک گره اضافه کنید</div>
+
+          <div className="form-field"><label>انتخاب گره</label>
+            <div className="node-picker">
+              {allNodesFlat.map(n => (
+                <div key={n.id} className={"pick-item " + (addForm.nodeId === n.id ? "selected" : "")}
+                  onClick={() => setAddForm({ ...addForm, nodeId: n.id })}>{n.title}</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-field"><label>نوع منبع</label>
+            <div className="type-picker">
+              {Object.entries(RESOURCE_TYPES).map(([k, v]) => (
+                <div key={k} className={"type-item " + (addForm.type === k ? "selected" : "")} onClick={() => setAddForm({ ...addForm, type: k })}>
+                  <i className={"ti " + v.icon}></i>{v.label}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-field"><label>سطح</label>
+            <div className="level-picker">
+              {LEVELS.map(lv => (
+                <div key={lv.key} className={"lv-item " + (addForm.level === lv.key ? "selected" : "")} onClick={() => setAddForm({ ...addForm, level: lv.key })}>
+                  <span className={"dot " + lv.dot} style={{ background: lv.dot === "dot-beginner" ? "#10b981" : lv.dot === "dot-intermediate" ? "#f59e0b" : "#ef4444" }}></span>
+                  {lv.label}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-field"><label>عنوان</label>
+            <input value={addForm.title} onChange={e => setAddForm({ ...addForm, title: e.target.value })} /></div>
+          <div className="form-field"><label>لینک</label>
+            <input value={addForm.url} onChange={e => setAddForm({ ...addForm, url: e.target.value })} /></div>
+
+          <div className="form-row">
+            <div className="form-field"><label>قیمت</label>
+              <select value={addForm.pricing} onChange={e => setAddForm({ ...addForm, pricing: e.target.value })}>
+                <option value="free">رایگان</option><option value="freemium">نیمه‌رایگان</option><option value="paid">پولی</option>
+              </select>
+            </div>
+            <div className="form-field"><label>زبان</label>
+              <select value={addForm.lang} onChange={e => setAddForm({ ...addForm, lang: e.target.value })}>
+                <option value="fa">فارسی</option><option value="en">انگلیسی</option>
+              </select>
+            </div>
+          </div>
+          <div className="form-field"><label>توضیح</label>
+            <textarea rows={2} value={addForm.reason} onChange={e => setAddForm({ ...addForm, reason: e.target.value })} /></div>
+          <button className="action-btn" onClick={submitAdd}><i className="ti ti-plus"></i> افزودن منبع</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ APP ============ */
+function App() {
+  const [state, setState] = useState(load);
+  const [expanded, setExpanded] = useState({});
+  const [selected, setSelected] = useState(null);
+  const [view, setView] = useState("detail");
+  const [role, setRole] = useState("user");
+  const [toast, setToast] = useState("");
+
+  useEffect(() => save(state), [state]);
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2000); };
+  const toggle = (id) => setExpanded(s => ({ ...s, [id]: !s[id] }));
+  const openNode = (node) => { setSelected(node); setView("detail"); };
+  const closeSheet = () => { setSelected(null); setView("detail"); };
+  const setStatus = (id, status) => setState(s => ({ ...s, statuses: { ...s.statuses, [id]: status } }));
+
+  const toggleLevel = (key) => setState(s => ({ ...s, collapsed: { ...s.collapsed, [key]: !s.collapsed[key] } }));
+
+  const addSuggestion = (sug) => {
+    setState(s => ({ ...s, suggestions: [...s.suggestions, sug] }));
+    showToast("پیشنهاد شما ثبت شد ✓");
+    setView("detail");
+  };
+  const approveSuggestion = (id) => {
+    setState(s => ({ ...s, suggestions: s.suggestions.map(x => x.id === id ? { ...x, status: "approved" } : x) }));
+    showToast("تأیید شد ✓");
+  };
+  const rejectSuggestion = (id) => {
+    setState(s => ({ ...s, suggestions: s.suggestions.filter(x => x.id !== id) }));
+    showToast("رد شد");
+  };
+  const deleteResource = (id) => {
+    setState(s => ({ ...s, suggestions: s.suggestions.filter(x => x.id !== id) }));
+    showToast("حذف شد");
+  };
+  const addResource = (res) => setState(s => ({ ...s, suggestions: [...s.suggestions, res] }));
+
+  const voteResource = (resId, dir) => {
+    setState(s => {
+      const current = s.votes[resId];
+      const newVotes = { ...s.votes };
+      if (current === dir) delete newVotes[resId];
+      else newVotes[resId] = dir;
+      const suggestions = s.suggestions.map(r => {
+        if (r.id !== resId) return r;
+        const v = { ...(r.votes || { up: 0, down: 0 }) };
+        if (current === "up") v.up = Math.max(0, v.up - 1);
+        if (current === "down") v.down = Math.max(0, v.down - 1);
+        if (dir === "up" && current !== "up") v.up++;
+        if (dir === "down" && current !== "down") v.down++;
+        return { ...r, votes: v };
+      });
+      return { ...s, votes: newVotes, suggestions };
+    });
+  };
+
+  const resourceCount = (nodeId) => state.suggestions.filter(r => r.nodeId === nodeId && r.status === "approved").length;
+
+  const progress = useMemo(() => {
+    const done = allNodesFlat.filter(n => state.statuses[n.id] === "done").length;
+    return Math.round((done / allNodesFlat.length) * 100);
+  }, [state.statuses]);
+
+  const pendingCount = state.suggestions.filter(s => s.status === "pending").length;
+
+  return (
+    <>
+      <div className="top-bar">
+        <div className="top-title-row">
+          <div className="top-title">
+            <i className="ti ti-route"></i>
+            {role === "user" ? "نقشه راه تحلیلگر مالی" : "پنل مدیریت"}
+          </div>
+          <div className="role-toggle">
+            <button className={role === "user" ? "active" : ""} onClick={() => setRole("user")}>
+              <i className="ti ti-user"></i> کاربر
+            </button>
+            <button className={role === "admin" ? "active" : ""} onClick={() => setRole("admin")}>
+              <i className="ti ti-shield-cog"></i> ادمین
+              {pendingCount > 0 && <span className="count-badge" style={{ background: "var(--danger)", color: "#fff", fontSize: 10, padding: "1px 5px", borderRadius: 8 }}>{pendingCount}</span>}
+            </button>
+          </div>
+          {role === "user" && <div className="pct-badge">{progress}%</div>}
+        </div>
+        {role === "user" && (
+          <div className="progress-track"><div className="progress-fill" style={{ width: progress + "%" }} /></div>
+        )}
+      </div>
+
+      {role === "user" ? (
+        <div className="canvas-wrap">
+          {ROADMAP.map((branch, i) => (
+            <div key={i}>
+              <div className="branch-header"><i className={"ti " + branch.icon}></i>{branch.branch}</div>
+              {branch.nodes.map(node => (
+                <NodeRow key={node.id} node={node} depth={0}
+                  statuses={state.statuses} expanded={expanded}
+                  onToggle={toggle} onSelect={openNode} resourceCount={resourceCount} />
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <AdminView state={state} onApprove={approveSuggestion} onReject={rejectSuggestion}
+          onDeleteResource={deleteResource} onAddResource={addResource} showToast={showToast} />
+      )}
+
+      <div className={"sheet-backdrop " + (selected ? "show" : "")} onClick={closeSheet}></div>
+      <div className={"sheet " + (selected ? "show" : "")}>
+        <div className="sheet-handle"></div>
+        {selected && (
+          <>
+            <div className="sheet-header">
+              <div className={"sheet-icon cat-" + selected.cat}><i className={"ti " + ICONS[selected.cat]}></i></div>
+              <div className="sheet-title">
+                <div>{selected.title}</div>
+                <div className="sheet-subtitle">{selected.level} • {selected.hours} ساعت</div>
+              </div>
+              <button className="sheet-close" onClick={closeSheet}><i className="ti ti-x"></i></button>
+            </div>
+            {view === "detail" ? (
+              <DetailSheet node={selected} statuses={state.statuses}
+                resources={state.suggestions} userVotes={state.votes}
+                collapsed={state.collapsed}
+                onStatusChange={setStatus} onSuggest={() => setView("suggest")}
+                onVote={voteResource} onToggleLevel={toggleLevel} />
+            ) : (
+              <SuggestSheet node={selected} onBack={() => setView("detail")} onSubmit={addSuggestion} />
+            )}
+          </>
+        )}
+      </div>
+
+      <div className={"toast " + (toast ? "show" : "")}>{toast}</div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(<App />);
+</script>
+</body>
+</html>
